@@ -8,10 +8,10 @@ ApngImageHandler::ApngImageHandler() :
 
 ApngImageHandler::~ApngImageHandler() = default;
 
-QByteArray ApngImageHandler::name() const
-{
-	return "apng";
-}
+// QByteArray ApngImageHandler::name() const
+// {
+// 	return "apng";
+// }
 
 bool ApngImageHandler::canRead() const
 {
