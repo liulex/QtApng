@@ -32,14 +32,22 @@ bool ApngReader::checkPngSig(QIODevice *device)
 
 bool ApngReader::init(QIODevice *device)
 {
-	if(_device)
-		return _infoRead;
+	if (_device == device) {
+		if (_device->pos() < _infoOffset) {
+			_allFrames.clear();
+			_device->seek(_infoOffset);
+		}
+		return _infoOffset > 0;
+	}
 
 	//verify png
 	if(checkPngSig(device))
 		_device = device;
 	else
 		return false;
+
+	// clear cached frames
+	_allFrames.clear();
 
 	//init png structs
 	_png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -58,7 +66,7 @@ bool ApngReader::init(QIODevice *device)
 
 	//set png jump position
 	if (setjmp(png_jmpbuf(_png))) {
-		_infoRead = false;
+		_infoOffset = 0;
 		return false;
 	}
 
@@ -66,9 +74,9 @@ bool ApngReader::init(QIODevice *device)
 	auto valid = readChunk(8);
 	do {
 		valid = readChunk();
-	} while(valid && !_infoRead);
+	} while(valid && _infoOffset == 0);
 
-	return _infoRead;
+	return _infoOffset > 0;
 }
 
 ApngReader::ApngFrame ApngReader::readFrame(quint32 index)
@@ -129,11 +137,16 @@ void ApngReader::info_fn(png_structp png_ptr, png_infop info_ptr)
 	(void)png_set_interlace_handling(png_ptr);
 	png_read_update_info(png_ptr, info_ptr);
 
+	quint32 width = png_get_image_width(png_ptr, info_ptr);
+	quint32 height = png_get_image_height(png_ptr, info_ptr);
+	reader->_imageSize.setWidth(width);
+	reader->_imageSize.setHeight(height);
+
 	//init read frame struct
 	frame.x = 0;
 	frame.y = 0;
-	frame.width = png_get_image_width(png_ptr, info_ptr);
-	frame.height = png_get_image_height(png_ptr, info_ptr);
+	frame.width = width;
+	frame.height = height;
 	frame.channels = png_get_channels(png_ptr, info_ptr);
 	frame.delay_num = 0;
 	frame.delay_den = 10;
@@ -165,7 +178,7 @@ void ApngReader::info_fn(png_structp png_ptr, png_infop info_ptr)
 	} else
 		reader->_animated = false;
 
-	reader->_infoRead = true;
+	reader->_infoOffset = reader->_device->pos();
 }
 
 void ApngReader::row_fn(png_structp png_ptr, png_bytep new_row, png_uint_32 row_num, int pass)
